@@ -11,36 +11,42 @@ pub enum Term {
     If(Box<Term>, Box<Term>, Box<Term>),
 }
 
-pub fn isnumericval(t: &Term) -> bool {
-    match t {
-        &Term::Zero => true,
-        &Term::Succ(ref t) => isnumericval(t),
+pub fn is_numeric_val(t: &Term) -> bool {
+    match *t {
+        Term::Zero => true,
+        Term::Succ(ref t) => is_numeric_val(t),
         _ => false,
     }
 }
 
-pub fn isvalue(t: &Term) -> bool {
-    match t {
-        &Term::True => true,
-        &Term::False => true,
-        t => isnumericval(t),
-    }
-}
-
 pub fn eval1(t: &Term) -> Option<Term> {
-    match t {
-        &Term::If(box Term::True, ref t2, _) => Some(*t2.clone()),
-        &Term::If(box Term::False, _, ref t3) => Some(*t3.clone()),
-        &Term::If(ref fi, ref t2, ref t3) => {
-            eval1(fi).map(|t| Term::If(box t, box *t2.clone(), box *t3.clone()))
+    match *t {
+        /// True-valued if statement
+        Term::If(box Term::True, ref t2, _) => Some(*t2.clone()),
+        /// False-valued if statement
+        Term::If(box Term::False, _, ref t3) => Some(*t3.clone()),
+        /// Evaluate the condition first, then return an if statement
+        /// that has the condition evaluated to a true or false
+        Term::If(ref cond, ref t2, ref t3) => {
+            eval1(cond).map(|boolean| Term::If(box boolean, box *t2.clone(), box *t3.clone()))
         }
-        &Term::Succ(ref t) => eval1(t).map(|t| Term::Succ(box t)),
-        &Term::Pred(box Term::Zero) => Some(Term::Zero),
-        &Term::Pred(box Term::Succ(ref nv1)) if isnumericval(nv1) => Some(*nv1.clone()),
-        &Term::Pred(ref t) => eval1(t).map(|t| Term::Pred(box t)),
-        &Term::IsZero(box Term::Zero) => Some(Term::True),
-        &Term::IsZero(box Term::Succ(ref nv1)) if isnumericval(nv1) => Some(Term::False),
-        &Term::IsZero(ref t) => eval1(t).map(|t| Term::IsZero(box t)),
+        /// Succ(t) means we have to evaluate t first to simplify it, then we
+        /// rewrite the term to Succ(evaled)
+        Term::Succ(ref t) => eval1(t).map(|evaled| Term::Succ(box evaled)),
+        /// The predecessor of Zero is defined as Zero
+        Term::Pred(box Term::Zero) => Some(Term::Zero),
+        /// The predecessor of the successor of a value is the value itself (if it was a numeric
+        /// value to begin with)
+        Term::Pred(box Term::Succ(ref nv1)) if is_numeric_val(nv1) => Some(*nv1.clone()),
+        /// Pred(t) means we have to evaluate t first to simplify it, then we
+        /// rewrite the term to Pred(evaled)
+        Term::Pred(ref t) => eval1(t).map(|evaled| Term::Pred(box evaled)),
+        /// By definition, the Zero term IsZero.
+        Term::IsZero(box Term::Zero) => Some(Term::True),
+        /// If the term is numeric and the successor of a value, then it cannot be IsZero
+        Term::IsZero(box Term::Succ(ref nv1)) if is_numeric_val(nv1) => Some(Term::False),
+        /// If a term evals to Zero, then the term IsZero
+        Term::IsZero(ref t) => eval1(t).map(|evaled| Term::IsZero(box evaled)),
         _ => None,
     }
 }
